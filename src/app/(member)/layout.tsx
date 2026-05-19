@@ -8,26 +8,54 @@ export default function MemberLayout({ children }: { children: React.ReactNode }
   const pathname = usePathname()
   const router = useRouter()
   const [userName, setUserName] = useState('')
+  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
-    fetch('/api/auth')
+    // Menandakan bahwa komponen sudah sukses terpasang di sisi client browser
+    setMounted(true)
+
+    const token = localStorage.getItem('sb-access-token')
+    
+    const headers = {
+      'Authorization': `Bearer ${token || ''}`,
+      'Content-Type': 'application/json'
+    }
+
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+
+    fetch(`${baseUrl}/api/auth`, { headers })
       .then(res => res.json())
       .then(data => {
-        if (!data.profile) {
+        if (!data.role && !data.user) {
           router.push('/login')
           return
         }
-        setUserName(data.profile.full_name)
+        setUserName(data.profile?.full_name || data.user?.user_metadata?.full_name || 'Member')
+      })
+      .catch(() => {
+        router.push('/login')
       })
   }, [router])
 
   async function handleLogout() {
-    await fetch('/api/auth', {
+    localStorage.removeItem('sb-access-token')
+    
+    document.cookie = "sb-access-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC;"
+    document.cookie = "sb-refresh-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC;"
+
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+
+    await fetch(`${baseUrl}/api/auth`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'logout' }),
     })
     router.push('/login')
+  }
+
+  // JIKA BELUM MOUNTED, KEMBALIKAN LAYAR LOADING KOSONG AGAR TERHINDAR DARI HYDRATION ERROR
+  if (!mounted) {
+    return <div className="min-h-screen bg-gray-950 text-gray-500 p-8">Memverifikasi sesi...</div>
   }
 
   const navLinks = [
