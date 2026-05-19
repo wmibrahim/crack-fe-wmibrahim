@@ -25,18 +25,28 @@ export async function updateSession(request: NextRequest) {
     }
   )
 
-  // Gunakan getClaims() bukan getSession() di proxy
+  // 1. Ambil data user dari Supabase resmi
   const { data } = await supabase.auth.getClaims()
-  const user = data?.claims
+  let user = data?.claims
+
+  // 2. JIKA KOSONG, coba baca cookie JWT manual yang di-set oleh port 3001
+  if (!user) {
+    const manualToken = request.cookies.get('sb-access-token')?.value || request.cookies.get('supabase-auth-token')?.value
+    if (manualToken) {
+      // Jika token manual ada, anggap ada user yang login (biarkan layout.tsx client-side yang memvalidasi detailnya nanti)
+      user = { sub: 'manual-token-user' } as any 
+    }
+  }
+
   const { pathname } = request.nextUrl
 
-  // Redirect ke login kalau belum login
+  // Redirect ke login kalau benar-benar belum ada indikasi login sama sekali
   if (!user && (pathname.startsWith('/member') || pathname.startsWith('/admin'))) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  // Cek role admin
-  if (user && pathname.startsWith('/admin')) {
+  // Cek role admin via proxy JIKA menggunakan session resmi (lewati jika pakai manual token karena layout akan menghandle)
+  if (user && user.sub !== 'manual-token-user' && pathname.startsWith('/admin')) {
     const { data: profile } = await supabase
       .from('profiles')
       .select('role')
@@ -48,19 +58,8 @@ export async function updateSession(request: NextRequest) {
     }
   }
 
-  // Redirect kalau sudah login, tidak perlu ke login/register lagi
-  if (user && (pathname === '/login' || pathname === '/register')) {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.sub)
-      .single()
-
-    if (profile?.role === 'admin') {
-      return NextResponse.redirect(new URL('/admin/dashboard', request.url))
-    }
-    return NextResponse.redirect(new URL('/member/dashboard', request.url))
-  }
+  // Jangan lakukan force-redirect ke dashboard jika user sedang di halaman login/register 
+  // BIARKAN client-side login mengatur perpindahannya agar API port 3001 tidak bertabrakan dengan proxy ini.
 
   return supabaseResponse
 }

@@ -2,11 +2,9 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { apiFetch } from '@/lib/api'
 
 export default function LoginPage() {
-  const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -16,23 +14,46 @@ export default function LoginPage() {
     setLoading(true)
     setError('')
 
-    const res = await apiFetch('/api/auth', {
-      method: 'POST',
-      body: JSON.stringify({ action: 'login', email, password }),
-    })
+    try {
+      const res = await apiFetch('/api/auth', {
+        method: 'POST',
+        body: JSON.stringify({ action: 'login', email, password }),
+      })
 
-    const data = await res.json()
-    setLoading(false)
+      const data = await res.json()
 
-    if (!res.ok) {
-      setError(data.error || 'Login gagal')
-      return
-    }
+      if (!res.ok) {
+        setLoading(false)
+        setError(data.error || 'Login gagal')
+        return
+      }
 
-    if (data.role === 'admin') {
-      router.push('/admin/dashboard')
-    } else {
-      router.push('/member/dashboard')
+      if (data.session) {
+        const { access_token, refresh_token, expires_in } = data.session
+
+        // Set cookie auth agar dibaca sinkron oleh server component
+        document.cookie = `sb-access-token=${access_token}; path=/; max-age=${expires_in}; SameSite=Lax;`
+        
+        if (refresh_token) {
+          document.cookie = `sb-refresh-token=${refresh_token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax;`
+        }
+
+        // Simpan token utama untuk Authorization Header apiFetch
+        localStorage.setItem('sb-access-token', access_token)
+      }
+
+      setLoading(false)
+
+      // SOLUSI FINAL: Menggunakan window.location untuk memaksa pengalihan halaman secara bersih
+      if (data.role === 'admin') {
+        window.location.href = '/admin/dashboard'
+      } else {
+        window.location.href = '/member/dashboard'
+      }
+      
+    } catch (err: any) {
+      setLoading(false)
+      setError('Terjadi kesalahan jaringan atau server.')
     }
   }
 
@@ -40,7 +61,6 @@ export default function LoginPage() {
     <main className="min-h-screen bg-gray-950 flex items-center justify-center px-4">
       <div className="w-full max-w-md bg-gray-900 rounded-2xl p-8 border border-gray-800 relative">
 
-        {/* Tombol X ke landing page */}
         <Link
           href="/"
           className="absolute top-4 right-4 text-gray-500 hover:text-white transition text-xl leading-none"

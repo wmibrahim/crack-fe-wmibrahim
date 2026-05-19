@@ -22,16 +22,31 @@ export default function MemberDashboardPage() {
 
   useEffect(() => {
     async function fetchData() {
-      const [authRes, bookingRes] = await Promise.all([
-        fetch('/api/auth'),
-        fetch('/api/bookings'),
-      ])
-      const authData = await authRes.json()
-      const bookingData = await bookingRes.json()
+      // Mengambil token JWT dari localStorage
+      const token = localStorage.getItem('sb-access-token')
+      
+      // Menyiapkan konfigurasi header Authorization
+      const headers = {
+        'Authorization': `Bearer ${token || ''}`,
+        'Content-Type': 'application/json'
+      }
 
-      setProfile(authData.profile)
-      setBookings(bookingData.bookings || [])
-      setLoading(false)
+      try {
+        const [authRes, bookingRes] = await Promise.all([
+          fetch('http://localhost:3001/api/auth', { headers }),
+          fetch('http://localhost:3001/api/bookings', { headers }),
+        ])
+        
+        const authData = await authRes.json()
+        const bookingData = await bookingRes.json()
+
+        setProfile(authData.profile)
+        setBookings(bookingData.bookings || [])
+      } catch (error) {
+        console.error('Gagal memuat data dashboard:', error)
+      } finally {
+        setLoading(false)
+      }
     }
     fetchData()
   }, [])
@@ -57,7 +72,7 @@ export default function MemberDashboardPage() {
   return (
     <div>
       <h2 className="text-2xl font-bold mb-1">
-        Halo, {profile?.full_name?.split(' ')[0]}! 👋
+        Halo, {profile?.full_name?.split(' ')[0] || 'Member'}! 👋
       </h2>
       <p className="text-gray-400 text-sm mb-8">Selamat datang kembali di GymBook</p>
 
@@ -93,7 +108,7 @@ export default function MemberDashboardPage() {
                 <div>
                   <p className="text-sm font-medium">{formatDate(booking.date)}</p>
                   <p className="text-xs text-gray-400 mt-0.5">
-                    {formatTime(booking.slots.start_time)} – {formatTime(booking.slots.end_time)}
+                    {booking.slots ? `${formatTime(booking.slots.start_time)} – ${formatTime(booking.slots.end_time)}` : ''}
                   </p>
                 </div>
                 <span className="text-xs bg-green-500/10 text-green-400 border border-green-500/20 px-2.5 py-1 rounded-full">
